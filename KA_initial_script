@@ -1,0 +1,66 @@
+# 1) Initialization
+units lj
+dimension 3
+atom_style atomic
+pair_style lj/cut 2.5
+boundary p p p
+
+region my_region block 0 9.485 0 9.485 0 9.485
+create_box 2 my_region
+create_atoms 1 random 819 167845 my_region
+create_atoms 2 random 205 250360 my_region
+mass 1 1
+mass 2 1
+
+pair_coeff 1 1 1.0 1.0
+pair_coeff 2 2 0.5 0.88
+pair_coeff 1 2 1.5 0.8
+neighbor 0.3 bin
+neigh_modify every 1 delay 5 check yes
+comm_modify cutoff 4.8
+# 5) Run
+minimize 1.0e-4 1.0e-6 1000 10000
+velocity all create 1.0 12345 dist gaussian
+# PART B - MOLECULAR DYNAMICS
+# 4) Visualization
+variable potential_energy equal pe
+variable pressure equal press
+variable temperature equal temp
+variable total_energy equal etotal
+fix myat1 all ave/time 1000 1 1000 v_temperature v_potential_energy v_total_energy v_pressure file energy_10.data
+dump mydump all atom 2500 dump.lammpstrj
+dump_modify mydump sort id
+dump mydmp all custom 2500 dump.*.data id type x y z vx vy vz
+dump_modify mydmp sort id
+
+fix nose all nvt temp 1.0 1.0 0.5 
+timestep 0.005
+
+run 300000 
+undump mydump
+undump mydmp
+unfix myat1 
+
+write_restart equilibrium.restart
+
+reset_timestep 0
+group A type 1
+group B type 2
+compute msdA A msd
+compute msdB B msd
+variable tLJ equal step*dt
+thermo_style custom v_tLJ c_msdA[4] c_msdB[4] temp pe etotal press
+thermo 100
+
+compute RDF all rdf 50 1 1 1 2 2 1 2 2 cutoff 4.5
+fix myrdf all ave/time 10 100 100000 c_RDF[*] file tmp.rdf mode vector
+dump my_dump all atom 20 dump.lammpstrj
+dump_modify my_dump sort id
+dump my_dmp all custom 100000 dump.*.data id type x y z vx vy vz
+dump_modify my_dmp sort id
+run 100000
+
+undump my_dump
+undump my_dmp
+unfix myrdf
+write_restart production.restart
